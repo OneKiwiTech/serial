@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -138,7 +139,7 @@ func (sp *SerialPort) Printf(format string, args ...interface{}) error {
 	return sp.Print(str)
 }
 
-//This method send a binary file trough the serial port. If EnableLog is active then this method will log file related data.
+// This method send a binary file trough the serial port. If EnableLog is active then this method will log file related data.
 func (sp *SerialPort) SendFile(filepath string) error {
 	// Aux Vars
 	sentBytes := 0
@@ -226,6 +227,50 @@ func (sp *SerialPort) WaitForRegexTimeout(exp string, timeout time.Duration) (st
 					result = regExpPatttern.FindAllString(line, -1)
 					if len(result) > 0 {
 						c1 <- result[0]
+						break
+					}
+				}
+			}
+		}()
+		select {
+		case data := <-c1:
+			sp.log("INF >> The RegExp: \"%s\"", exp)
+			sp.log("INF >> Has been matched: \"%s\"", data)
+			return data, nil
+		case <-time.After(timeout):
+			timeExpired = true
+			sp.log("INF >> Unable to match RegExp: \"%s\"", exp)
+			return "", fmt.Errorf("Timeout expired")
+		}
+	} else {
+		return "", fmt.Errorf("Serial port is not open")
+	}
+	return "", nil
+}
+
+// Wait for a defined regular expression for a defined amount of time.
+func (sp *SerialPort) WaitForContainsTimeout(exp string, timeout time.Duration) (string, error) {
+
+	if sp.portIsOpen {
+		//Decode received data
+		timeExpired := false
+
+		//regExpPatttern := regexp.MustCompile(exp)
+
+		//Timeout structure
+		c1 := make(chan string, 1)
+		go func() {
+			sp.log("INF >> Waiting for RegExp: \"%s\"", exp)
+			//result := []string{}
+			for !timeExpired {
+				line, err := sp.ReadLine()
+				if err != nil {
+					// Do nothing
+				} else {
+					//result = regExpPatttern.FindAllString(line, -1)
+					result := strings.Contains(line, exp)
+					if result == result {
+						c1 <- exp
 						break
 					}
 				}
